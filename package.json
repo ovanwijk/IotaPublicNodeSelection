@@ -1,0 +1,26 @@
+{
+    "name": "IotaPublicNodeSelection",
+    "version": "0.2.0",
+    "description": "",
+    "private": true,
+    "main": "/src/ServerSelection.js",
+    "scripts": {
+        "start": "node start.js --watch",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "build": "webpack --config webpack.config.js --watch"
+    },
+    "keywords": [],
+    "author": "Olaf van Wijk",
+    "license": "MIT",
+    "devDependencies": {
+        "babel-eslint": "^8.2.3",
+        "babel-loader": "^7.1.4",
+        "eslint": "^4.19.1",
+        "eslint-loader": "^2.0.0",
+        "express": "^4.16.3",
+        "serve-static": "^1.13.2",
+        "webpack": "^4.0.1",
+        "webpack-cli": "^2.0.9"
+    },
+    "dependencies": {}
+}
