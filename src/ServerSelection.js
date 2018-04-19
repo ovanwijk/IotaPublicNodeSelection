@@ -1,8 +1,11 @@
+// var geoGraphics = require('./Geographics.js');
+// var countryMap = geoGraphics.countryMap;
+// var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
 import { countryMap, getDistanceFromLatLonInKm } from './Geographics';
-import { async } from './ServerSelection';
 
 
-export async function getPublicNode(serversPerFetch = 15) {
+
+async function getPublicNode(serversPerFetch = 15) {
 
     var myLocation = JSON.parse(await okToFailHTTPRequest("https://ipinfo.io/json", "{'country':null}"));
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
@@ -64,7 +67,7 @@ export async function getPublicNode(serversPerFetch = 15) {
     return newHost;
 }
 
-export async function getGeospreadPublicNodes(maxCount = 5) {
+async function getGeospreadPublicNodes(maxCount = 5) {
 
     var myLocation = JSON.parse(await okToFailHTTPRequest("https://ipinfo.io/json", "{'country':null}"));
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
@@ -149,7 +152,7 @@ async function getServerFromList(servers, currentIndex, maxCount, results = []) 
 
 }
 
-export async function getLowestLatencyServer(servers = []) {
+async function getLowestLatencyServer(servers = []) {
 
     return new Promise(function(fulfilled, rejected) {
         var totalRequests = servers.length;
@@ -208,3 +211,5 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null) {
     });
 
 }
+
+export { getPublicNode, getGeospreadPublicNodes }

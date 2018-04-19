@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <script type="text/javascript" src="lib/IotaPublicNodeSelection.js"></script>
+    <script type="text/javascript" src="dist/IotaPublicNodeSelection.web.js"></script>
 
 
     <title>Testing</title>
@@ -15,8 +15,8 @@
     <div id="root"></div>
     <script>
         (async function() {
-            console.log(await IotaPublicNodeSelection.getPublicNode(10));
-            console.log(await IotaPublicNodeSelection.getGeospreadPublicNodes(5));
+            console.log(await iotapublicnodeselection.getPublicNode(10));
+            console.log(await iotapublicnodeselection.getGeospreadPublicNodes(5));
         })()
     </script>
 

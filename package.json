@@ -1,16 +1,23 @@
 {
-    "name": "IotaPublicNodeSelection",
-    "version": "0.2.0",
-    "description": "",
-    "private": true,
-    "main": "/src/ServerSelection.js",
+    "name": "iotapublicnodeselection",
+    "title": "IotaPublicNodeSelection",
+    "version": "0.2.4",
+    "private": false,
+    "main": "./dist/IotaPublicNodeSelection.js",
     "scripts": {
         "start": "node start.js --watch",
         "test": "echo \"Error: no test specified\" && exit 1",
         "build": "webpack --config webpack.config.js --watch"
     },
     "keywords": [],
-    "author": "Olaf van Wijk",
+    "author": {
+        "name": "Olaf van Wijk",
+        "url": "http://github.com/ovanwijk"
+    },
+    "repository": {
+        "type": "git",
+        "url": "http://github.com/ovanwijk/IotaPublicNodeSelection"
+    },
     "license": "MIT",
     "devDependencies": {
         "babel-eslint": "^8.2.3",
