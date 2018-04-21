@@ -1,7 +1,7 @@
 {
     "name": "iotapublicnodeselection",
     "title": "IotaPublicNodeSelection",
-    "version": "0.2.4",
+    "version": "0.3.0",
     "private": false,
     "main": "./dist/IotaPublicNodeSelection.js",
     "scripts": {
