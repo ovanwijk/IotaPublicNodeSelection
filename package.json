@@ -7,7 +7,7 @@
     "scripts": {
         "start": "node start.js --watch",
         "test": "echo \"Error: no test specified\" && exit 1",
-        "build": "webpack --config webpack.config.js --watch"
+        "build": "webpack --config webpack.config.js"
     },
     "keywords": [],
     "author": {

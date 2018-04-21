@@ -27,12 +27,12 @@ var serverConfig = {
   module: {
     rules: rules
   }
-  //…
+  
 };
 
 var clientConfig = {
   mode:'development',
-  target: 'web', // <=== can be omitted as default is 'web'
+  target: 'web', // 
   entry: './src/ServerSelection.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -45,8 +45,8 @@ var clientConfig = {
   },
   externals:[{
     xmlhttprequest: '{XMLHttpRequest:XMLHttpRequest}'
-}]
-  //…
+  }]
+  
 };
 
 
