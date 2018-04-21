@@ -1,6 +1,8 @@
 
 
-export function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+
+
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 	var R = 6371; // Radius of the earth in km
 	var dLat = deg2rad(lat2 - lat1); // deg2rad below
 	var dLon = deg2rad(lon2 - lon1);
@@ -15,7 +17,7 @@ function deg2rad(deg) {
 }
 
 
-export const countryMap = {
+const countryMap = {
     "EU": { //EU center is considered germany, why ? because IOTA ;)
         "country": "EU",
         "latitude": 51.165691,
@@ -1498,4 +1500,10 @@ export const countryMap = {
         "longitude": 29.154857,
         "name": "Zimbabwe"
     }
+}
+
+
+module.exports = {
+    countryMap:countryMap,
+    getDistanceFromLatLonInKm: getDistanceFromLatLonInKm
 }

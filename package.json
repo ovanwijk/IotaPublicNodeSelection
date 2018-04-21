@@ -29,5 +29,7 @@
         "webpack": "^4.0.1",
         "webpack-cli": "^2.0.9"
     },
-    "dependencies": {}
+    "dependencies": {
+        "xmlhttprequest": "^1.8.0"
+    }
 }

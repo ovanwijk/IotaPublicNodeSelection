@@ -1,17 +1,22 @@
-// var geoGraphics = require('./Geographics.js');
-// var countryMap = geoGraphics.countryMap;
-// var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
-import { countryMap, getDistanceFromLatLonInKm } from './Geographics';
+ var geoGraphics = require('./Geographics');
+ var XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest 
+ var countryMap = geoGraphics.countryMap;
+ var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
 
 
 
+ /**
+  * Gets a public node from public resources.
+  * @param {*} serversPerFetch Amounts of servers to request latency from in parrallel, lower is nicer for servers, higher will yield a faster result.
+  */
 async function getPublicNode(serversPerFetch = 15) {
 
     var myLocation = JSON.parse(await okToFailHTTPRequest("https://ipinfo.io/json", "{'country':null}"));
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
     myLocation.lat = myLocation.loc.split(',')[0]
     myLocation.lon = myLocation.loc.split(',')[1]
-        //Find the highest mile of each server and normalize the country codes.
+ 
+    //Find the highest mile of each server and normalize the country codes.
     var maxMileStone = null;
     servers.forEach(server => {
         maxMileStone = Math.max(maxMileStone, server.latest_milestone_index);
@@ -20,14 +25,13 @@ async function getPublicNode(serversPerFetch = 15) {
         }
     })
 
-
     //Filter the servers on online status and synchronization. Sometimes milestones lag a bit and therefore we take -5
     //latest milestones as fine. Also detects if the host is using http or https
     servers = servers.filter(
         a => (a.online === "1") &&
         a.latest_milestone_index >= maxMileStone - 5 &&
         a.latest_sub_milestone_index >= maxMileStone - 5 &&
-        a.host.startsWith(window.location.protocol));
+        (typeof window === 'undefined' || a.host.startsWith(window.location.protocol)));
 
     //Calculate a general distanceMap for country codes. And put your own country at 0;
     var distanceMap = {}
@@ -51,7 +55,6 @@ async function getPublicNode(serversPerFetch = 15) {
     servers = servers.sort((a, b) => a.distance - b.distance);
 
     var newHost = null;
-
     var sliceIndex = 0;
     while (sliceIndex < servers.length && newHost == null) {
         //Do 3 requests at a time
@@ -62,8 +65,7 @@ async function getPublicNode(serversPerFetch = 15) {
         }
         sliceIndex += serversPerFetch;
     }
-    //var newHost = await getLowestLatencyServer(servers.slice(Math.min(15, servers.length)).map(s => s.host))
-
+ 
     return newHost;
 }
 
@@ -73,7 +75,8 @@ async function getGeospreadPublicNodes(maxCount = 5) {
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
     myLocation.lat = myLocation.loc.split(',')[0]
     myLocation.lon = myLocation.loc.split(',')[1]
-        //Find the highest mile of each server and normalize the country codes.
+    
+    //Find the highest mile of each server and normalize the country codes.
     var maxMileStone = null;
     servers.forEach(server => {
         maxMileStone = Math.max(maxMileStone, server.latest_milestone_index);
@@ -89,7 +92,7 @@ async function getGeospreadPublicNodes(maxCount = 5) {
         a => (a.online === "1") &&
         a.latest_milestone_index >= maxMileStone - 5 &&
         a.latest_sub_milestone_index >= maxMileStone - 5 &&
-        a.host.startsWith(window.location.protocol));
+        (typeof window === 'undefined' || a.host.startsWith(window.location.protocol)));
 
     //Calculate a general distanceMap for country codes. And put your own country at 0;
     var distanceMap = {}
@@ -153,13 +156,14 @@ async function getServerFromList(servers, currentIndex, maxCount, results = []) 
 }
 
 async function getLowestLatencyServer(servers = []) {
-
+   
     return new Promise(function(fulfilled, rejected) {
         var totalRequests = servers.length;
         var returned = false;
         for (let i = 0; i < servers.length; i++) {
             getNodeLatency(servers[i]).then(latency => {
                 totalRequests -= 1;
+               
                 if (!returned && latency != 999999) {
                     returned = true;
                     fulfilled(servers[i]);
@@ -190,7 +194,7 @@ async function getNodeLatency(server) {
 async function okToFailHTTPRequest(url, defaultReturn, postBody = null) {
     return new Promise(function(fulfilled, rejected) {
         var x = new XMLHttpRequest();
-
+       //console.log(url);
         x.onload = function(e) {
             fulfilled(x.responseText);
         };
@@ -211,5 +215,7 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null) {
     });
 
 }
-
-export { getPublicNode, getGeospreadPublicNodes }
+module.exports = {
+    getPublicNode: getPublicNode,
+    getGeospreadPublicNodes: getGeospreadPublicNodes
+}

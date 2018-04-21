@@ -20,7 +20,9 @@ var serverConfig = {
   entry: './src/ServerSelection.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'IotaPublicNodeSelection.js'
+    filename: 'IotaPublicNodeSelection.js',
+    libraryTarget: 'commonjs2',
+    library: 'iotapublicnodeselection'
   },
   module: {
     rules: rules
@@ -40,7 +42,10 @@ var clientConfig = {
   },
   module: {
     rules: rules
-  }
+  },
+  externals:[{
+    xmlhttprequest: '{XMLHttpRequest:XMLHttpRequest}'
+}]
   //…
 };
 
