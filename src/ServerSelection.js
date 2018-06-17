@@ -1,21 +1,25 @@
- var geoGraphics = require('./Geographics');
+ //var geoGraphics = require('./Geographics');
+ import {countryMap, getDistanceFromLatLonInKm} from './Geographics.js';
  var XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest 
- var countryMap = geoGraphics.countryMap;
- var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
+ //var countryMap = geoGraphics.countryMap;
+ //var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
 
 
 
  /**
   * Gets a public node from public resources.
   * @param {*} serversPerFetch Amounts of servers to request latency from in parrallel, lower is nicer for servers, higher will yield a faster result.
+  * @param {*} excludeServers Servers to exclude from selection, this is meant to so you can call it multiple times with a different result.
   */
-async function getPublicNode(serversPerFetch = 15) {
+export async function getPublicNode(serversPerFetch = 15, excludeServers = []) {
 
     var myLocation = JSON.parse(await okToFailHTTPRequest("https://ipinfo.io/json", "{'country':null}"));
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
     myLocation.lat = myLocation.loc.split(',')[0]
     myLocation.lon = myLocation.loc.split(',')[1]
  
+    servers = servers.filter(a => !excludeServers.includes(a.host))
+
     //Find the highest mile of each server and normalize the country codes.
     var maxMileStone = null;
     servers.forEach(server => {
@@ -69,7 +73,7 @@ async function getPublicNode(serversPerFetch = 15) {
     return newHost;
 }
 
-async function getGeospreadPublicNodes(maxCount = 5) {
+export async function getGeospreadPublicNodes(maxCount = 5) {
 
     var myLocation = JSON.parse(await okToFailHTTPRequest("https://ipinfo.io/json", "{'country':null}"));
     var servers = JSON.parse(await okToFailHTTPRequest("https://iotanode.host/node_table.json", "[]"));
@@ -199,7 +203,7 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null) {
             fulfilled(x.responseText);
         };
         x.onerror = function(e) {
-            console.log("Error: ", e)
+            console.log("Error on " + url, e)
             fulfilled(defaultReturn);
         };
         if (postBody) {
@@ -215,7 +219,8 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null) {
     });
 
 }
-module.exports = {
-    getPublicNode: getPublicNode,
-    getGeospreadPublicNodes: getGeospreadPublicNodes
-}
+
+// module.exports = {
+//     getPublicNode: getPublicNode,
+//     getGeospreadPublicNodes: getGeospreadPublicNodes
+// }

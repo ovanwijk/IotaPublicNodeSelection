@@ -21,18 +21,23 @@ var serverConfig = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'IotaPublicNodeSelection.js',
-    libraryTarget: 'commonjs2',
+    libraryTarget: 'umd',
     library: 'iotapublicnodeselection'
   },
   module: {
     rules: rules
+  },
+  node: {
+    fs: 'empty',
+    child_process: 'empty',
+    path: 'empty'
   }
   
 };
 
 var clientConfig = {
   mode:'development',
-  target: 'web', // 
+  target: 'web',
   entry: './src/ServerSelection.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -45,7 +50,12 @@ var clientConfig = {
   },
   externals:[{
     xmlhttprequest: '{XMLHttpRequest:XMLHttpRequest}'
-  }]
+  }],
+  node: {
+    fs: 'empty',
+    child_process: 'empty',
+    path: 'empty'
+  }
   
 };
 
