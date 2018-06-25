@@ -42,7 +42,7 @@ var clientConfig = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'IotaPublicNodeSelection.web.js',
-    libraryTarget: 'var',
+    libraryTarget: 'umd',
     library: 'iotapublicnodeselection'
   },
   module: {

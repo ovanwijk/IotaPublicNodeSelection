@@ -1,9 +1,9 @@
 {
     "name": "iotapublicnodeselection",
     "title": "IotaPublicNodeSelection",
-    "version": "0.3.2",
+    "version": "0.3.6",
     "private": false,
-    "main": "./dist/IotaPublicNodeSelection.js",
+    "main": "./src/ServerSelection.js",
     "scripts": {
         "start": "node start.js --watch",
         "test": "echo \"Error: no test specified\" && exit 1",

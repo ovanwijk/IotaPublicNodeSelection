@@ -1,10 +1,14 @@
  //var geoGraphics = require('./Geographics');
  import {countryMap, getDistanceFromLatLonInKm} from './Geographics.js';
- var XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest 
+ import  XMLHttpRequest from 'xmlhttprequest';
  //var countryMap = geoGraphics.countryMap;
  //var getDistanceFromLatLonInKm = geoGraphics.getDistanceFromLatLonInKm;
 
+var latestMilestone = 0;
 
+export function getLatestMileStone(){
+    return latestMilestone;
+}
 
  /**
   * Gets a public node from public resources.
@@ -21,9 +25,9 @@ export async function getPublicNode(serversPerFetch = 15, excludeServers = []) {
     servers = servers.filter(a => !excludeServers.includes(a.host))
 
     //Find the highest mile of each server and normalize the country codes.
-    var maxMileStone = null;
+    
     servers.forEach(server => {
-        maxMileStone = Math.max(maxMileStone, server.latest_milestone_index);
+        latestMilestone = Math.max(latestMilestone, server.latest_milestone_index);
         if (server.ncountry) {
             server.ncountry = server.ncountry.toUpperCase();
         }
@@ -33,8 +37,8 @@ export async function getPublicNode(serversPerFetch = 15, excludeServers = []) {
     //latest milestones as fine. Also detects if the host is using http or https
     servers = servers.filter(
         a => (a.online === "1") &&
-        a.latest_milestone_index >= maxMileStone - 5 &&
-        a.latest_sub_milestone_index >= maxMileStone - 5 &&
+        a.latest_milestone_index >= latestMilestone - 5 &&
+        a.latest_sub_milestone_index >= latestMilestone - 5 &&
         (typeof window === 'undefined' || a.host.startsWith(window.location.protocol)));
 
     //Calculate a general distanceMap for country codes. And put your own country at 0;
