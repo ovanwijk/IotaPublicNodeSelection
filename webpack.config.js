@@ -17,7 +17,7 @@ var rules = [
 var serverConfig = {
   mode:'development',
   target: 'node',
-  entry: './src/ServerSelection.js',
+  entry: './index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'IotaPublicNodeSelection.js',
@@ -38,11 +38,11 @@ var serverConfig = {
 var clientConfig = {
   mode:'development',
   target: 'web',
-  entry: './src/ServerSelection.js',
+  entry: './index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'IotaPublicNodeSelection.web.js',
-    libraryTarget: 'umd',
+    libraryTarget: 'var',
     library: 'iotapublicnodeselection'
   },
   module: {

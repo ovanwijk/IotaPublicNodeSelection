@@ -1,10 +1,7 @@
 
+import * as iotapublicnodeselection from './src/ServerSelection';
 
-var iotapublicnodeselection = require("./dist/IotaPublicNodeSelection.js");
-//var iotapublicnodeselection = require("./src/ServerSelection.js");
-//var yeah = await iotapublicnodeselection.getGeospreadPublicNodes(5);
 
-console.log(location)
 
 var AUTO3 = async function(){
    

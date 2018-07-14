@@ -14,9 +14,38 @@
 
     <div id="root"></div>
     <script>
+        var iota = new iotapublicnodeselection.IOTAAPI({
+            provider: ""
+        });
         (async function() {
-            console.log(await iotapublicnodeselection.getPublicNode(10));
-            console.log(await iotapublicnodeselection.getGeospreadPublicNodes(5));
+            var multiNodes = new iotapublicnodeselection.IotaMultiNode.IotaMultiNode();
+            multiNodes.setHintedServers(
+                ["https://turbor.ddns.net:443"], ["https://turbor.ddns.net:443", "https://wallet1.iota.town:443"], []
+            )
+            await multiNodes.initialize();
+            var address = 'AAAAMTW9OCUYFKYIYEGJHGEDBLAGLIPJCG9KPOVPDVYCSNUAS9HJDKJGCDSRYZBNDP9LXQMHQIWGQHOZD';
+            var transfer = [{
+                address: address,
+                value: 0,
+                message: 'HELLOTEST',
+                tag: '9'.repeat(27)
+            }];
+
+            var testSeed = "AAAAMTW9OCUYFKYIYEGJHGEDBLAGLIPJCG9KPOVPDVYCSNUAS9HJDKJGCDSRYZBNDP9LXQMHQIWGQHOZD"
+            var trytes = await iotapublicnodeselection.IotaMultiNode.promisifyAPI(iota, "prepareTransfers", testSeed, transfer);
+            //var trytes = iota.api.prepareTransfers(testSeed, transfer);
+            var powServer = multiNodes.selectPowServers();
+            debugger;
+            var sendTrytesResult = await multiNodes.sendTrytesPromise(trytes, 9, 14);
+
+            var jeej = await multiNodes.findTransactionsPromise({
+                addresses: [address]
+            }, 4);
+            debugger;
+
+            //console.log(await iotapublicnodeselection.iotapublicnodeselection.getPublicNode(15));
+            //console.log(await iotapublicnodeselection.iotapublicnodeselection.getGeospreadPublicNodes(5));
+            //console.log(iotapublicnodeselection.getCache())
         })()
     </script>
 
