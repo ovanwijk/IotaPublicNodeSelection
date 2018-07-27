@@ -1,30 +1,36 @@
 import IOTA from 'iota.lib.js';
-var XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
+//var XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
 import * as ServerSelection from './ServerSelection';
 
-export async function AUTO_N(N, exclude = []) {
+export async function AUTO_N(N, serversPerFetch = 10,  exclude = []) {
     var selected = [].concat(exclude);
     //var fetchesPerN = [15, 10, 7, 5, 5]
     //var serversPerFetching = fetchesPerN[Math.max(N, fetchesPerN.length) - 1];
     for (var i = 0; i < N; i++) {
-        var result = await ServerSelection.getPublicNode(15, selected);
+        var result = await ServerSelection.getPublicNode(serversPerFetch, selected);
         if(result){
             selected.push(result);
         }
     }
+    console.log("AUTO_N Selected: " , selected);
     return selected;
 }
 
 const iotaAPICommandNotAvailableHTTPCode = 401; //Unauthorized.
 const serverStateCommand = "getNodeInfo";
 
-const fetchServerCommands = ["findTransactions", "getTrytes", "wereAddressesSpentFrom", "getBalances"];
+//const fetchServerCommands = ["findTransactions", "getTrytes", "wereAddressesSpentFrom", "getBalances"];
+const fetchServerCommands = [];
 
 const transactionServerCommands = [
-    "broadcastTransactions", "storeTransactions", "getTransactionsToApprove"
+    "getTransactionsToApprove"
 ];
+// const transactionServerCommands = [
+//     "broadcastTransactions", "storeTransactions", "getTransactionsToApprove"
+// ];
 
-const powServerCommands = ["attachToTangle", "interruptAttachingToTangle"];
+//const powServerCommands = ["attachToTangle", "interruptAttachingToTangle"];
+const powServerCommands = ["attachToTangle"];
 
 const allCommands = [serverStateCommand]
     .concat(fetchServerCommands)
@@ -47,6 +53,7 @@ async function iotaNodeCapabilityTest(url) {
 }
 
 async function iotaNodesCapabilities(servers) {
+    
     var serverCapabilities = await Promise.all(servers.map(server => {
         return iotaNodeCapabilityTest(server)
     }));
@@ -57,11 +64,24 @@ async function iotaNodesCapabilities(servers) {
     return serverList;
 }
 
-export async function promisifyAPI(iota, command, ...args) {    
+
+
+
+
+export async function promisifyAPI(iota, command, ...args) {
+    
     return new Promise(function (fulfilled, rejected) {
-        var callback = function(error, success){           
+        var timeout = setTimeout(function(){
+            //we returned "ERROR" so we can easily detect it and promise.all still returns.
+            debugger;
+            ServerSelection.failedHosts.push(iota.provider);
+            fulfilled("ERROR");
+            console.error("Got a failed host in API", iota.provider);
+        }, 30000)
+        var callback = function(error, success){      
+            clearTimeout(timeout);     
             if(error){
-                rejected(error);
+                fulfilled("ERROR" + error);
             }else{
                 fulfilled(success);
             }                
@@ -91,8 +111,8 @@ export class IotaMultiNode {
        
         this.highestObservedMilestoneIndex = 0;
         this.overWriteAttachToTangle = null; //If a function this will be used for proof of work
-        this.initialize = this
-            .initialize
+        this.addAutoN = this
+            .addAutoN
             .bind(this);
         this.options = {
             onlyUseHintedServers: false,
@@ -121,10 +141,57 @@ export class IotaMultiNode {
         })
     }
 
-    setHintedServers(fetchServers = [], transactionServers = [], powServers = []) {
-        this.fetchServerHints = fetchServers.filter(s => (typeof window === 'undefined' || s.startsWith(window.location.protocol)));
-        this.transactionServerHints = transactionServers.filter(s => (typeof window === 'undefined' || s.startsWith(window.location.protocol)));
-        this.powServerHints = powServers.filter(s => (typeof window === 'undefined' || s.startsWith(window.location.protocol)));
+
+    /**
+     * Initializes N servers, there is no guarentee that there will be.
+     * It is better to call this BEFORE adding hintedServers because it results in a
+     * more correct latestMilestone.
+     * @param {*} N 
+     */
+    async addAutoN(N = 5, serversPerFetch = 10) {
+
+        var timeTest = Date.now();
+        var servers = await AUTO_N(N, serversPerFetch); //Always pick a server from iotanodes.host to determine the highest milestone index.
+        console.log("Obtaining auto N took: ", Date.now() - timeTest);
+        servers = servers.filter(a => !this.liveServers[a]);
+        var serverList = await iotaNodesCapabilities(servers);
+        Object.assign(this.liveServers, serverList);
+        this.shouldSort = true;
+        this.highestObservedMilestoneIndex = ServerSelection.getLatestMilestone();
+    }
+
+    /**
+     * Checks if a node is loaded or not.
+     * Returns false when never touched the server
+     * Will return true if it was succesfully reached OR when it failed.
+     * This is to prevent trying again.
+     * @param {*} server 
+     */
+    isNodeLoaded(server){
+        return (this.liveServers[server] !== null)
+    }
+
+
+
+    async setHintedServers(fetchServers = [], transactionServers = [], powServers = []) {
+        this.fetchServerHints = fetchServers.filter(s => (typeof location === 'undefined' || s.startsWith(location.protocol)));
+        this.transactionServerHints = transactionServers.filter(s => (typeof location === 'undefined' || s.startsWith(location.protocol)));
+        this.powServerHints = powServers.filter(s => (typeof location === 'undefined' || s.startsWith(location.protocol)));
+        var allHintedServers = this
+        .fetchServerHints
+        .concat(this.transactionServerHints)
+        .concat(this.powServerHints);
+        
+        //Just the unique ones we care about.
+        allHintedServers = allHintedServers.filter(a => !this.liveServers[a]);
+        var hintedServerList = await iotaNodesCapabilities(allHintedServers.filter(function (item, pos) {
+            return allHintedServers.indexOf(item) == pos;
+        }));
+
+        Object.assign(this.liveServers, hintedServerList);
+        this.shouldSort = true;
+        this.highestObservedMilestoneIndex = ServerSelection.getLatestMilestone();
+        
     }
 
     sortLatencies() {
@@ -140,6 +207,7 @@ export class IotaMultiNode {
                 .sort(function (a, b) {
                     return a.latency - b.latency;
                 });
+            this.shouldSort = false;
         }
     }
 
@@ -157,9 +225,9 @@ export class IotaMultiNode {
             .filter(a => serverHints.indexOf(a.host) === -1);
 
         var listToIterate = [].concat(serverHints.map(host => {
-            return this.liveServers(host);
+            return this.liveServers[host];
         })).concat(sortedListCopy);
-
+        listToIterate = listToIterate.filter(server => ServerSelection.failedHosts.indexOf(server.host) == -1)
         for (var i = 0; i < listToIterate.length; i++) {
             var isCorrectServer = true;
             commandList.forEach(command => {
@@ -178,7 +246,6 @@ export class IotaMultiNode {
                 break;
             }
         }
-
         return toReturn;
     }
 
@@ -220,35 +287,6 @@ export class IotaMultiNode {
     }
 
 
-    async initialize(N = 5) {
-        var timeTest = Date.now();
-        if (!this.options.onlyUseHintedServers) {
-
-            var servers = await AUTO_N(N); //Always pick a server from iotanodes.host to determine the highest milestone index.
-            console.log("Obtaining auto N took: ", Date.now() - timeTest);
-            
-            var serverList = await iotaNodesCapabilities(servers);
-
-            Object.assign(this.liveServers, serverList);
-        }
-
-        var allHintedServers = this
-            .fetchServerHints
-            .concat(this.transactionServerHints)
-            .concat(this.powServerHints);
-
-        //Just the unique ones we care about.
-        
-        var hintedServerList = await iotaNodesCapabilities(allHintedServers.filter(function (item, pos) {
-            return allHintedServers.indexOf(item) == pos;
-        }));
-
-        Object.assign(this.liveServers, hintedServerList);
-
-        this.highestObservedMilestoneIndex = ServerSelection.getLatestMilestone();
-        this.shouldSort = true;
-    }
-
     /**
      * Gets an IOTA API
      * @param {*} host 
@@ -270,12 +308,20 @@ export class IotaMultiNode {
         //getTransactionsToApprove transactionServersCount
         console.log("Sending trytes");
         var transactionServers = this.selectTransactionServers(this.transactionServersCount);
-        var tipApi = this.getApi(transactionServers[0].host);
+        //var tipApi = this.getApi(transactionServers[0].host);
         var powServer = this.selectPowServers()[0];
         var powApi = this.getApi(powServer.host);
         //get Tips from single server
+        var me = this;
         console.log("Executing getTransactionsToApprove");
-        var tips = await promisifyAPI(tipApi, "getTransactionsToApprove", depth, undefined);
+        //For tips we just race.
+        var tips = await Promise.race(transactionServers.map(server => {
+            return (async () => {       
+                return await promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove', depth, undefined);
+            })();
+        }))
+
+        //var tips = await promisifyAPI(tipApi, "getTransactionsToApprove", depth, undefined);
         //do proof of work just 1 time.
         console.log("Doing POW");
         var attachedTrytes = await promisifyAPI(powApi,
@@ -283,8 +329,9 @@ export class IotaMultiNode {
               minWeightMagnitude, trytes);
         console.log("Doing storeAndBroadcast");
         //Store and broadcost to all transaction servers.
-        var me = this;
-        return await Promise.all(transactionServers.map(server => {
+        
+        //we race and let the rest of the servers just do its job.
+        return await Promise.race(transactionServers.map(server => {
             return (async () => {       
                 return {host:server, result: await promisifyAPI(me.getApi(server.host), 'storeAndBroadcast', attachedTrytes)};
             })();
@@ -294,54 +341,148 @@ export class IotaMultiNode {
 
     //TODO making it streaming/paging
 
-    async findTransactionsObjectsPromise(searchValues, redundency = 1) {
+    async findTransactionsObjectsPromise(searchValues, redundency = 3) {
         var servers = this.selectFetchServers(redundency);
         var me = this;
-        return await Promise.all(servers.map(server => {
+        var result = await Promise.all(servers.map(server => {
             return (async () => {       
                 return {host:server, result: await promisifyAPI(me.getApi(server.host), 'findTransactionObjects', searchValues)};
             })();
         }))
+
+        var buffer = {}
+        result.forEach(result => {
+           
+            if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                result.result.forEach(transaction => {
+                    
+                    buffer[transaction.hash] = transaction;
+                })
+            }
+        })
+
+        //combine results
+        var combinedResult = {
+            combinedTransactions:  Object.values(buffer),         
+            raw: result
+        }
+        
+        //combinedResult.combinedTransactions = Object.values(buffer);       
+        return combinedResult;
     }
 
-    async findTransactionsPromise(searchValues, redundency = 1) {
-        var servers = this.selectFetchServers(redundency);
-        var me = this;
-        return await Promise.all(servers.map(server => {            
-            return (async () => {
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'findTransactions', searchValues)}
-            })();
-        }))
-    }
+    // async findTransactionsPromise(searchValues, redundency = 3) {
+    //     var servers = this.selectFetchServers(redundency);
+    //     var me = this;
+    //     var result = await Promise.all(servers.map(server => {            
+    //         return (async () => {
+    //             return {host:server, result: await promisifyAPI(me.getApi(server.host), 'findTransactions', searchValues)}
+    //         })();
+    //     }));
+    //     return result;
+    // }
 
-    async getTrytesPromise(hashes, redundency = 1) {
-        var servers = this.selectFetchServers(redundency);
-        var me = this;
-        return await Promise.all(servers.map(server => {            
-            return (async () => {
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getTrytes', hashes)}
-            })();
-        }));
-    }
+    // async getTrytesPromise(hashes, redundency = 1) {
+    //     var servers = this.selectFetchServers(redundency);
+    //     var me = this;
+    //     var result = await Promise.all(servers.map(server => {            
+    //         return (async () => {
+    //             return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getTrytes', hashes)}
+    //         })();
+    //     }));
+    //     var buffer = {}
+    //     result.forEach(result => {
+    //         if(!result.startsWith("ERROR")){
+    //             result.result.forEach(transaction => {
+                    
+    //                 buffer[transaction.hash] = transaction;
+    //             })
+    //         }
+    //     })
+
+    //     //combine results
+    //     var combinedResult = {
+    //         combinedTransactions:  Object.values(buffer),         
+    //         raw: result
+    //     }
+        
+
+
+
+    //     return 
+    // }
     
-    async getTrytesFromTransactionServersPromise(hashes, redundency = 1) {
-        var servers = this.selectTransactionServers(redundency);
-        var me = this;
-        return await Promise.all(servers.map(server => {            
-            return (async () => {
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getTrytes', hashes)}
-            })();
-        }));
-    }
+    // async getTrytesFromTransactionServersPromise(hashes, redundency = 1) {
+    //     var servers = this.selectTransactionServers(redundency);
+    //     var me = this;
+    //     return await Promise.all(servers.map(server => {            
+    //         return (async () => {
+    //             return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getTrytes', hashes)}
+    //         })();
+    //     }));
+    // }
 
     async wereAddressesSpentFromPromise(addresses, redundency = 1) {
         var servers = this.selectTransactionServers(redundency);
         var me = this;
-        return await Promise.all(servers.map(server => {            
+
+        var result = await Promise.all(servers.map(server => {            
             return (async () => {
                 return {host:server, result: await promisifyAPI(me.getApi(server.host), 'wereAddressesSpentFrom', addresses)}
             })();
         }));
+        var buffer = new Array(addresses.length);
+        for(var i = 0; i< addresses.length; i++){
+            result.forEach(result => {           
+                if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                    
+                    buffer[i] = buffer[i] ? true : result.result[i]; 
+                    
+                }
+            })
+        }
+
+        //combine results
+        var combinedResult = {
+            combinedResult:  buffer,         
+            raw: result
+        }
+        
+        //combinedResult.combinedTransactions = Object.values(buffer);       
+        return combinedResult;
+         
+    }
+
+    async getBalancesFromPromise(addresses, redundency = 1) {
+        var servers = this.selectTransactionServers(redundency);
+        var me = this;
+        var result = await Promise.all(servers.map(server => {            
+            return (async () => {
+                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getBalances', addresses, 100)}
+            })();
+        }));
+
+        
+        var buffer = new Array(addresses.length);
+        for(var i = 0; i< addresses.length; i++){
+            result.forEach(result => {           
+                if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                    
+                    buffer[i] = Math.max(buffer[i] ? buffer[i] : 0, Number(result.result.balances[i])); 
+                    
+                }
+            })
+        }
+
+        //combine results
+        var combinedResult = {
+            combinedResult:  buffer,         
+            raw: result
+        }
+        
+        //combinedResult.combinedTransactions = Object.values(buffer);       
+        return combinedResult;
+         
     }
 
 

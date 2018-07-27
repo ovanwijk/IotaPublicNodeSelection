@@ -18,7 +18,7 @@ export function setMilestoneTolerance(tolerance = 5) {
 export var serverResultCache = {}
 export var latencyTestTimeOut = 3000;
 
-var failedHosts = []
+export var failedHosts = [];
 
 var locationCache = null;
 // We only need it once, unless you teleport around. Calculate all distences
@@ -123,7 +123,7 @@ export async function getGeospreadPublicNodes(maxCount = 5, excludeServers = [])
     // Filter the servers on online status and synchronization. Sometimes milestones
     // lag a bit and therefore we take -5 latest milestones as fine. Also detects if
     // the host is using http or https
-    servers = servers.filter(a => (a.online === "1") && a.latest_milestone_index >= latestMilestone - milestoneTolerance && a.latest_sub_milestone_index >= latestMilestone - milestoneTolerance && (typeof window === 'undefined' || a.host.startsWith(window.location.protocol)));
+    servers = servers.filter(a => (a.online === "1") && a.latest_milestone_index >= latestMilestone - milestoneTolerance && a.latest_sub_milestone_index >= latestMilestone - milestoneTolerance && (typeof location === 'undefined' || a.host.startsWith(location.protocol)));
 
     // Calculate a general distanceMap for country codes. And put your own country at
     // 0;
@@ -180,6 +180,7 @@ async function getLowestLatencyServer2(servers = []) {
             lowestLatencyServer = servers[i]
         }
     }
+    //console.log("Selected " + lowestLatencyServer + "with latency" + lowestLatency)
     return lowestLatencyServer;
 }
 
@@ -242,13 +243,12 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null, timeOut 
                         response: "Timeout"
                     }
                     console.log("Timeout setTimoeout on " + url);
+                    x.abort();
                     fulfilled(defaultReturn);
                 }, timeOut);
             }
             if (x.readyState == 2 && latency == 999999) {
                 latency = Date.now() - timetest;
-                
-                
             };
         }
 
@@ -286,6 +286,7 @@ async function okToFailHTTPRequest(url, defaultReturn, postBody = null, timeOut 
             console.log("Error on " + url, e);
             fulfilled(defaultReturn);
         };
+        //x.onabort = x.onerror;
         if (postBody) {
             x.open("POST", url, true);
             x.setRequestHeader('Content-Type', 'application/json');
@@ -319,7 +320,7 @@ export async function iotaCapabilityTest(url, command, timeOut = 3000) {
                     result['latency'] = 999999;
                     result[command] = false;
                     console.log("Timeout setTimoeout on " + url, command);
-                   
+                    x.abort();
                     fulfilled(result);
                     
                 }, timeOut);
@@ -364,9 +365,9 @@ export async function iotaCapabilityTest(url, command, timeOut = 3000) {
             result['lastestCommand'] = timetest;
             result['latency'] = 999999;
             result[command] = false;
+            console.log("Error on " + url, e);
             fulfilled(result);
         };
-
         x.open("POST", url, true);
         x.setRequestHeader('Content-Type', 'application/json');
         x.setRequestHeader("X-IOTA-API-Version", "1");
