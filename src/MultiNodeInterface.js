@@ -66,23 +66,35 @@ async function iotaNodesCapabilities(servers) {
 
 
 
-
-
 export async function promisifyAPI(iota, command, ...args) {
-    
+    // if(!timestampDelayCheckMap[delayConfig.id]){
+    //     timestampDelayCheckMap[delayConfig.id] = -1;
+    // }
+    ServerSelection.requestsOpen[iota.provider] = true;
+    var powOrNotTimeout = command == "attachToTangle" ? 300000 : 30000;
     return new Promise(function (fulfilled, rejected) {
+        //var started = Date.now();
         var timeout = setTimeout(function(){
+            // var timeDiff = Date.now() - timestampDelayCheckMap[delayConfig.id];
+            // if(timestampDelayCheckMap[delayConfig.id] > 0 && timeDiff > delayConfig.waitTime){
+            //     clearInterval(timeout);
+            //     //debugger;
+            //     console.log("Errored TIMOUT", iota.provider,  command, delayConfig)
+            //     fulfilled("ERROR");
+            // }
             //we returned "ERROR" so we can easily detect it and promise.all still returns.
-            debugger;
+            //debugger;
             ServerSelection.failedHosts.push(iota.provider);
             fulfilled("ERROR");
             console.error("Got a failed host in API", iota.provider);
-        }, 30000)
-        var callback = function(error, success){      
-            clearTimeout(timeout);     
+        }, powOrNotTimeout)
+        var callback = function(error, success){
+            clearTimeout(timeout); 
             if(error){
-                fulfilled("ERROR" + error);
+                
+                fulfilled("ERROR " + error);
             }else{
+                ServerSelection.requestsOpen[iota.provider] = false;
                 fulfilled(success);
             }                
         }
@@ -151,7 +163,9 @@ export class IotaMultiNode {
     async addAutoN(N = 5, serversPerFetch = 10) {
 
         var timeTest = Date.now();
-        var servers = await AUTO_N(N, serversPerFetch); //Always pick a server from iotanodes.host to determine the highest milestone index.
+        
+        
+        var servers = await AUTO_N(N, serversPerFetch, Object.keys(this.liveServers).concat(ServerSelection.failedHosts)); //Always pick a server from iotanodes.host to determine the highest milestone index.
         console.log("Obtaining auto N took: ", Date.now() - timeTest);
         servers = servers.filter(a => !this.liveServers[a]);
         var serverList = await iotaNodesCapabilities(servers);
@@ -227,7 +241,15 @@ export class IotaMultiNode {
         var listToIterate = [].concat(serverHints.map(host => {
             return this.liveServers[host];
         })).concat(sortedListCopy);
-        listToIterate = listToIterate.filter(server => ServerSelection.failedHosts.indexOf(server.host) == -1)
+        
+        var toDeny = [].concat(ServerSelection.failedHosts);
+        Object.keys(ServerSelection.requestsOpen).forEach(server => {
+            if(ServerSelection.requestsOpen[server]){
+               
+                toDeny.push(server);
+            }
+        })
+        listToIterate = listToIterate.filter(server => toDeny.indexOf(server.host) == -1)
         for (var i = 0; i < listToIterate.length; i++) {
             var isCorrectServer = true;
             commandList.forEach(command => {
@@ -257,6 +279,16 @@ export class IotaMultiNode {
      
         return this.selectXServers(N, powServerCommands, this.powServerHints, 
             Math.min(minimumIncludedHints, this.powServerHints.length), false);
+    }
+
+    async findPowServer(){
+        for(var i = 0; i < 15; i++){
+            var lpowServers = this.selectPowServers();
+            if(lpowServers.length > 0){
+                break;
+            }
+            await this.addAutoN(5, 15);
+        }
     }
 
     selectTransactionServers(N = 3, minimumIncludedHints = 1) { //Ideally we want > 1 servers for this.
@@ -304,71 +336,207 @@ export class IotaMultiNode {
     }
    
 
-    async sendTrytesPromise(trytes, depth, minWeightMagnitude, options){
+    async sendTrytesPromise( trytes, depth, minWeightMagnitude, options){
         //getTransactionsToApprove transactionServersCount
         console.log("Sending trytes");
         var transactionServers = this.selectTransactionServers(this.transactionServersCount);
         //var tipApi = this.getApi(transactionServers[0].host);
-        var powServer = this.selectPowServers()[0];
-        var powApi = this.getApi(powServer.host);
+        var powServers = this.selectPowServers(3);
+        //var powApi = this.getApi(powServer.host);
         //get Tips from single server
         var me = this;
         console.log("Executing getTransactionsToApprove");
         //For tips we just race.
-        var tips = await Promise.race(transactionServers.map(server => {
-            return (async () => {       
-                return await promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove', depth, undefined);
-            })();
-        }))
+       
+        // var tips = await Promise.race(transactionServers.map(server => {
+        //     return (async () => {       
+        //         return await promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove', depth, undefined);
+        //     })();
+        // }))
 
+        var tips = await this.getTransactionToApprovePromise(depth);
         //var tips = await promisifyAPI(tipApi, "getTransactionsToApprove", depth, undefined);
         //do proof of work just 1 time.
         console.log("Doing POW");
-        var attachedTrytes = await promisifyAPI(powApi,
-             "attachToTangle", tips.trunkTransaction, tips.branchTransaction,
-              minWeightMagnitude, trytes);
+      
+        var attachedTrytes = await Promise.race(powServers.map(server => {
+            return (async () => {  
+                return await promisifyAPI(me.getApi(server.host), 
+                    "attachToTangle", tips.combinedResult.trunkTransaction, tips.combinedResult.branchTransaction,
+                     minWeightMagnitude, trytes);    
+                //return await promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove', depth, undefined);
+            })();
+        }))
+        //var attachedTrytes =
         console.log("Doing storeAndBroadcast");
         //Store and broadcost to all transaction servers.
+
+        //obtainNewTransaction servers as some might still be busy with POW.
+        transactionServers = this.selectTransactionServers(this.transactionServersCount);
         
         //we race and let the rest of the servers just do its job.
+        
         return await Promise.race(transactionServers.map(server => {
             return (async () => {       
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'storeAndBroadcast', attachedTrytes)};
+                return {host:server, result: await promisifyAPI(me.getApi(server.host),  'storeAndBroadcast', attachedTrytes)};
             })();
         }))
 
     }
 
+
+    async getTransactionToApprovePromise(depth, reference = undefined, timeOut = 30000) {
+        return new Promise(function (fulfilled, rejected) {
+            var servers = this.selectTransactionServers(this.transactionServersCount);
+
+            var me = this;
+            var firstSuccesFullResult = null;
+            //var t = Date.now();
+            var totalResults = [];
+            var intervals = [];
+
+            var timer = setTimeout(() => {
+                intervals.forEach(interval =>{
+                    clearInterval(interval);
+                });
+                debugger;
+                rejected("Complete timeout");
+            }, timeOut)
+            var resultFunction = function(){
+                if(totalResults.length == servers.length){
+                    intervals.forEach(interval =>{
+                        clearInterval(interval);
+                    })
+                    var buffer = {}
+                    totalResults.forEach(result => {
+                        //ERRORError: Request Error: Invalid depth input
+                        if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                            
+                            buffer.trunkTransaction =  result.result.trunkTransaction;
+                            buffer.branchTransaction =  result.result.branchTransaction;
+                            
+                        }
+                    });
+                    debugger;
+                    var combinedResult = {
+                        combinedResult:  buffer,         
+                        raw: totalResults
+                    }
+                    clearTimeout(timer);
+                    fulfilled(combinedResult);
+                }
+            }
+
+            servers.forEach((server, index ) => {
+           
+                    var finished = false;
+                    intervals.push(setInterval(()=>{                   
+                        if(!finished && firstSuccesFullResult && Date.now() - firstSuccesFullResult > 2000){
+                            finished = true;
+                            console.warn("Lagging timeout of ", server);
+                            totalResults.push({host:server, result: "ERROR"});
+                            resultFunction();
+                        }
+                    }), 250);
+                        promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove',  depth, reference).then(result => {
+                        finished = true;
+                        if(!(typeof(result) === "string" && result.startsWith("ERROR"))){
+                            if(result.length > 0){
+                                firstSuccesFullResult = Date.now();
+                            }
+                        }else{
+                            console.error("getTransactionsToApprove ERROR", result)
+                        }
+                        totalResults.push({host:server, result: result});
+                        resultFunction();
+                    })
+            })
+       
+    }.bind(this));
+
+
+        //     var tips = await Promise.race(transactionServers.map(server => {
+        //         return (async () => {       
+        //             return await promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove', depth, undefined);
+        //         })();
+        //     }))
+        // });
+    }
+
     //TODO making it streaming/paging
 
-    async findTransactionsObjectsPromise(searchValues, redundency = 3) {
-        var servers = this.selectFetchServers(redundency);
-        var me = this;
-        var result = await Promise.all(servers.map(server => {
-            return (async () => {       
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'findTransactionObjects', searchValues)};
-            })();
-        }))
-
-        var buffer = {}
-        result.forEach(result => {
+    async findTransactionsObjectsPromise( searchValues, redundency = 3, timeOut = 30000) {
+        /**
+         * This is a special implementation that does delayed racinig.
+         * If it one of the servers returns a good result (>0 transactions) then other servers
+         * will have to respond withing 2 seconds for their result to be included. Otherwise the
+         * first is returned.
+         * 
+         * This is to filter out servers that hang on pending connections.
+         */
+        return new Promise(function (fulfilled, rejected) {
            
-            if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
-                result.result.forEach(transaction => {
-                    
-                    buffer[transaction.hash] = transaction;
-                })
-            }
-        })
+            var servers = this.selectFetchServers(redundency);
+            var me = this;
+            var firstSuccesFullResult = null;
+            //var t = Date.now();
+            var totalResults = [];
+            var intervals = [];
 
-        //combine results
-        var combinedResult = {
-            combinedTransactions:  Object.values(buffer),         
-            raw: result
-        }
-        
-        //combinedResult.combinedTransactions = Object.values(buffer);       
-        return combinedResult;
+            var timer = setTimeout(() => {
+                intervals.forEach(interval =>{
+                    clearInterval(interval);
+                });
+                rejected("Complete timeout");
+            }, timeOut)
+            var resultFunction = function(){
+                if(totalResults.length == servers.length){
+                    intervals.forEach(interval =>{
+                        clearInterval(interval);
+                    })
+                    var buffer = {}
+                    totalResults.forEach(result => {
+                    
+                        if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                            result.result.forEach(transaction => {
+                                
+                                buffer[transaction.hash] = transaction;
+                            })
+                        }
+                    })
+                    var combinedResult = {
+                        combinedTransactions:  Object.values(buffer),         
+                        raw: totalResults
+                    }
+                    clearTimeout(timer);
+                    fulfilled(combinedResult);
+                }
+            }
+
+            servers.forEach((server, index ) => {
+           
+                    var finished = false;
+                    intervals.push(setInterval(()=>{                   
+                        if(!finished && firstSuccesFullResult && Date.now() - firstSuccesFullResult > 2000){
+                            finished = true;
+                            console.warn("Lagging timeout of ", server);
+                            totalResults.push({host:server, result: "ERROR"});
+                            resultFunction();
+                        }
+                    }), 250);
+                        promisifyAPI(me.getApi(server.host), 'findTransactionObjects', searchValues).then(result => {
+                        finished = true;
+                        if(!(typeof(result) === "string" && result.startsWith("ERROR"))){
+                            if(result.length > 0){
+                                firstSuccesFullResult = Date.now();
+                            }
+                        }
+                        totalResults.push({host:server, result: result});
+                        resultFunction();
+                    })
+            })
+       
+    }.bind(this));
     }
 
     // async findTransactionsPromise(searchValues, redundency = 3) {
@@ -422,10 +590,83 @@ export class IotaMultiNode {
     //     }));
     // }
 
-    async wereAddressesSpentFromPromise(addresses, redundency = 1) {
+
+    async wereAddressesSpentFromPromise2( addresses, redundency = 1, timeOut = 30000) {
+        return new Promise(function (fulfilled, rejected) {
+           
+            var servers = this.selectFetchServers(redundency);
+            var me = this;
+            var firstSuccesFullResult = null;
+            //var t = Date.now();
+            var totalResults = [];
+            var intervals = [];
+
+            var timer = setTimeout(() => {
+                intervals.forEach(interval =>{
+                    clearInterval(interval);
+                });
+                rejected("Complete timeout");
+            }, timeOut)
+            var resultFunction = function(){
+                if(totalResults.length == servers.length){
+                    intervals.forEach(interval =>{
+                        clearInterval(interval);
+                    })
+                    var buffer = new Array(addresses.length);
+                    for(var i = 0; i< addresses.length; i++){
+                        totalResults.forEach(result => {           
+                            if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                                
+                                buffer[i] = buffer[i] ? true : result.result[i]; 
+                                
+                            }
+                        })
+                    }
+
+                    //combine results
+                    var combinedResult = {
+                        combinedResult:  buffer,         
+                        raw: totalResults
+                    }
+                    clearTimeout(timer);
+                    fulfilled(combinedResult);
+                }
+            }
+
+            servers.forEach((server, index ) => {
+           
+                    var finished = false;
+                    intervals.push(setInterval(()=>{                   
+                        if(!finished && firstSuccesFullResult && Date.now() - firstSuccesFullResult > 2000){
+                            finished = true;
+                            console.warn("Lagging timeout of ", server);
+                            totalResults.push({host:server, result: "ERROR"});
+                            resultFunction();
+                        }
+                    }), 250);
+                        promisifyAPI(me.getApi(server.host), 'wereAddressesSpentFrom', addresses).then(result => {
+                        finished = true;
+                        if(!(typeof(result) === "string" && result.startsWith("ERROR"))){
+                            if(result.length > 0){
+                                firstSuccesFullResult = Date.now();
+                            }
+                        }
+                        totalResults.push({host:server, result: result});
+                        resultFunction();
+                    })
+            })
+       
+    }.bind(this));
+         
+    }
+
+
+
+    async wereAddressesSpentFromPromise( addresses, redundency = 1) {
+        return this.wereAddressesSpentFromPromise2(addresses, redundency);
         var servers = this.selectTransactionServers(redundency);
         var me = this;
-
+        
         var result = await Promise.all(servers.map(server => {            
             return (async () => {
                 return {host:server, result: await promisifyAPI(me.getApi(server.host), 'wereAddressesSpentFrom', addresses)}
@@ -453,35 +694,111 @@ export class IotaMultiNode {
          
     }
 
-    async getBalancesFromPromise(addresses, redundency = 1) {
-        var servers = this.selectTransactionServers(redundency);
-        var me = this;
-        var result = await Promise.all(servers.map(server => {            
-            return (async () => {
-                return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getBalances', addresses, 100)}
-            })();
-        }));
+    async getBalancesFromPromise2(addresses, redundency = 1, timeOut = 30000) {
+        return new Promise(function (fulfilled, rejected) {
+           
+            var servers = this.selectFetchServers(redundency);
+            var me = this;
+            var firstSuccesFullResult = null;
+            //var t = Date.now();
+            var totalResults = [];
+            var intervals = [];
 
-        
-        var buffer = new Array(addresses.length);
-        for(var i = 0; i< addresses.length; i++){
-            result.forEach(result => {           
-                if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
-                    
-                    buffer[i] = Math.max(buffer[i] ? buffer[i] : 0, Number(result.result.balances[i])); 
-                    
+            var timer = setTimeout(() => {
+                intervals.forEach(interval =>{
+                    clearInterval(interval);
+                });
+                rejected("Complete timeout");
+            }, timeOut)
+            var resultFunction = function(){
+                if(totalResults.length == servers.length){
+                    intervals.forEach(interval =>{
+                        clearInterval(interval);
+                    })
+                    clearTimeout(timer);
+                    var buffer = new Array(addresses.length);
+                    for(var i = 0; i< addresses.length; i++){
+                        totalResults.forEach(result => {           
+                            if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                                
+                                buffer[i] = Math.max(buffer[i] ? buffer[i] : 0, Number(result.result.balances[i])); 
+                                
+                            }
+                        })
+                    }
+
+                    //combine results
+                    var combinedResult = {
+                        combinedResult:  buffer,         
+                        raw: totalResults
+                    }
+                   
+                    fulfilled(combinedResult);
                 }
-            })
-        }
+            }
 
-        //combine results
-        var combinedResult = {
-            combinedResult:  buffer,         
-            raw: result
-        }
+            servers.forEach((server, index ) => {
+           
+                    var finished = false;
+                    intervals.push(setInterval(()=>{                   
+                        if(!finished && firstSuccesFullResult && Date.now() - firstSuccesFullResult > 2000){
+                            finished = true;
+                            console.warn("Lagging timeout of getBalances ", server);
+                            
+                            totalResults.push({host:server, result: "ERROR"});
+                            resultFunction();
+                        }
+                    }), 250);
+                        promisifyAPI(me.getApi(server.host), 'getBalances', addresses, 100).then(result => {
+                        finished = true;
+                        if(!(typeof(result) === "string" && result.startsWith("ERROR"))){
+                            
+                            if(result.balances.length > 0){
+                              
+                                firstSuccesFullResult = Date.now();
+                            }
+                        }
+                        totalResults.push({host:server, result: result});
+                        resultFunction();
+                    })
+            })
+       
+    }.bind(this));
+         
+    }
+
+
+    async getBalancesFromPromise(addresses, redundency = 1) {
+        return  this.getBalancesFromPromise2(addresses, redundency);
+        // var servers = this.selectTransactionServers(redundency);
+        // var me = this;
+     
+        // var result = await Promise.all(servers.map(server => {            
+        //     return (async () => {
+        //         return {host:server, result: await promisifyAPI(me.getApi(server.host), 'getBalances', addresses, 100)}
+        //     })();
+        // }));
+
         
-        //combinedResult.combinedTransactions = Object.values(buffer);       
-        return combinedResult;
+        // var buffer = new Array(addresses.length);
+        // for(var i = 0; i< addresses.length; i++){
+        //     result.forEach(result => {           
+        //         if(!(typeof(result.result) === "string" && result.result.startsWith("ERROR"))){
+                    
+        //             buffer[i] = Math.max(buffer[i] ? buffer[i] : 0, Number(result.result.balances[i])); 
+                    
+        //         }
+        //     })
+        // }
+
+        // //combine results
+        // var combinedResult = {
+        //     combinedResult:  buffer,         
+        //     raw: result
+        // }
+        
+        // //combinedResult.combinedTransactions = Object.values(buffer);       
+        // return combinedResult;
          
     }
 
@@ -537,3 +854,5 @@ export class IotaMultiNode {
     //-----------------
 */
 }
+
+

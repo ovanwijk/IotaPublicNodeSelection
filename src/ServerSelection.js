@@ -18,8 +18,12 @@ export function setMilestoneTolerance(tolerance = 5) {
 export var serverResultCache = {}
 export var latencyTestTimeOut = 3000;
 
-export var failedHosts = [];
+export var failedHosts = []; //["http://iotanode1.codeworx.de:14265", "http://iotanode5.codeworx.de:14265"];
 
+
+export var requestsOpen = {
+
+}
 var locationCache = null;
 // We only need it once, unless you teleport around. Calculate all distences
 // once.

@@ -35,7 +35,7 @@
         "mocha": "^5.2.0"
     },
     "dependencies": {
-        "iota.lib.js": "^0.4.7",
+        "iota.lib.js": "ovanwijk/iota.lib.js#master",
         "xmlhttprequest": "^1.8.0"
     }
 }
