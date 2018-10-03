@@ -417,7 +417,7 @@ export class IotaMultiNode {
                             
                         }
                     });
-                    debugger;
+                   
                     var combinedResult = {
                         combinedResult:  buffer,         
                         raw: totalResults
@@ -441,7 +441,7 @@ export class IotaMultiNode {
                         promisifyAPI(me.getApi(server.host), 'getTransactionsToApprove',  depth, reference).then(result => {
                         finished = true;
                         if(!(typeof(result) === "string" && result.startsWith("ERROR"))){
-                            if(result.length > 0){
+                            if(result.trunkTransaction && result.branchTransaction){
                                 firstSuccesFullResult = Date.now();
                             }
                         }else{
